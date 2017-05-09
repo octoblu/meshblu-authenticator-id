@@ -19,8 +19,8 @@ class AuthenticatorService
       @meshbluHttp
     }
 
-  exchange: ({ id }, callback) =>
-    @_findOrCreate { id }, (error, uuid) =>
+  exchange: ({ id, metadata }, callback) =>
+    @_findOrCreate { id, metadata }, (error, uuid) =>
       return callback error if error?
       @_generateToken { uuid }, (error, { uuid, token }={}) =>
         return callback error if error?
@@ -52,14 +52,14 @@ class AuthenticatorService
       return callback error if error?
       callback null, _.get device, 'uuid'
 
-  _findOrCreate: ({ id }, callback) =>
+  _findOrCreate: ({ id, metadata }, callback) =>
     debug 'maybe create device', { id }
     @_findDevice { id }, (error, uuid) =>
       return callback error if error?
-      return @_updateDevice { uuid, id }, callback if uuid?
+      return @_updateDevice { uuid, id, metadata }, callback if uuid?
       @_createDevice { id }, (error, uuid) =>
         return callback error if error?
-        @_updateDevice { uuid, id }, callback
+        @_updateDevice { uuid, id, metadata }, callback
 
   _generateSearchId: ({ id }) =>
     return "authenticator:#{@authenticatorUuid}:#{id}"
@@ -68,15 +68,16 @@ class AuthenticatorService
     debug 'generate token', uuid
     @meshbluHttp.generateAndStoreToken uuid, callback
 
-  _updateDevice: ({ uuid, id }, callback) =>
+  _updateDevice: ({ uuid, id, metadata }, callback) =>
     searchId = @_generateSearchId { id }
-    user = {}
-    user.id = id
-    user.updatedAt = moment().utc().toJSON()
-    user.loggedOutAt = null
     query =
       $addToSet: { 'meshblu.search.terms': searchId }
-      $set: { user }
+      $set: {
+        'user.id': id
+        'user.metadata': metadata
+        'user.updatedAt': moment().utc().toJSON()
+        'user.loggedOutAt': null
+      }
     @meshbluHttp.updateDangerously uuid, query, (error) =>
       return callback error if error?
       callback null, uuid
